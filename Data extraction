@@ -1,0 +1,194 @@
+
+import rasterio
+from rasterio.transform import rowcol
+from rasterio.windows import Window
+from pyproj import Transformer
+import numpy as np
+from scipy.spatial import cKDTree
+import sys
+
+# =================================================
+# OPEN SMALL RASTER (read full array)
+# =================================================
+def open_raster(path):
+    ds = rasterio.open(path)
+    arr = ds.read(1)
+    return ds, arr, ds.nodata, ds.transform, ds.crs
+
+# =================================================
+# OPEN LARGE RASTER (pixel read only)
+# =================================================
+def open_large_raster(path):
+    ds = rasterio.open(path)
+    return ds, ds.nodata, ds.transform, ds.crs
+
+# =================================================
+# XY → row/col
+# =================================================
+def xy_to_rowcol(transform, arr, x, y):
+    row, col = rowcol(transform, x, y)
+    if arr is not None:
+        if row < 0 or col < 0 or row >= arr.shape[0] or col >= arr.shape[1]:
+            return None, None
+    return row, col
+
+# =================================================
+# KDTree nearest (small rasters)
+# =================================================
+def nearest_valid_value(arr, nodata, transform, x, y):
+    rows, cols = arr.shape
+
+    # Flatten row/col and arr
+    row_idx, col_idx = np.meshgrid(np.arange(rows), np.arange(cols), indexing='ij')
+    row_flat = row_idx.flatten()
+    col_flat = col_idx.flatten()
+    arr_flat = arr.flatten()
+
+    mask = arr_flat != nodata
+    row_valid = row_flat[mask]
+    col_valid = col_flat[mask]
+    values = arr_flat[mask]
+
+    # Convert to real-world coordinates
+    xs_real, ys_real = rasterio.transform.xy(transform, row_valid, col_valid)
+    coords = np.column_stack((xs_real, ys_real))
+
+    tree = cKDTree(coords)
+    _, idx = tree.query([x, y], k=1)
+
+    return values[idx], coords[idx]
+
+# =================================================
+# READ SINGLE PIXEL (large rasters)
+# =================================================
+def read_pixel(ds, row, col):
+    try:
+        window = Window(col, row, 1, 1)
+        val = ds.read(1, window=window)
+        return val[0, 0]
+    except:
+        return None
+
+# =================================================
+# EXPANDING SEARCH FOR LARGE RASTERS
+# =================================================
+def get_value_large(ds, transform, nodata, x, y):
+    row, col = xy_to_rowcol(transform, None, x, y)
+    value = read_pixel(ds, row, col)
+    used_nearest = False
+
+    if value in (None, nodata):
+        for radius in range(1, 11):
+            for dr in range(-radius, radius + 1):
+                for dc in range(-radius, radius + 1):
+                    r = row + dr
+                    c = col + dc
+                    if r < 0 or c < 0:
+                        continue
+                    val = read_pixel(ds, r, c)
+                    if val not in (None, nodata):
+                        return val, True
+
+    return value, used_nearest
+
+# =================================================
+# LOAD 4326 RASTERS
+# =================================================
+ds_ph, arr_ph, nodata_ph, tr_ph, crs_main = open_raster("F:/NP/pH_CaCl/4326.tif")
+ds_water, arr_water, nodata_water, tr_water, _ = open_raster("F:/NP/water_mask_whole_reprojected_EU.tif")
+ds_koppen, arr_koppen, nodata_koppen, tr_koppen, _ = open_raster("F:/NP/Prototype_input_original_image-20260107T225850Z-1-001/Prototype_input_original_image/Koppen_climate/koppen_geiger_0p00833333.tif")
+ds_kfac, arr_kfac, nodata_kfac, tr_kfac, _ = open_raster("F:/NP/Prototype_input_original_image-20260107T225850Z-1-001/Prototype_input_original_image/Erodibility_Kfactor/K-Factor.tif")
+
+# =================================================
+# LOAD 3035 RASTERS
+# =================================================
+ds_slope, nodata_slope, tr_slope, crs_3035 = open_large_raster("F:/NP/Prototype_input_original_image-20260107T225850Z-1-001/Prototype_input_original_image/slope/eudem_slop_3035_europe.tif")
+ds_clay, nodata_clay, tr_clay, _ = open_large_raster("F:/NP/Clay_Extra/Clay.tif")
+ds_cn, nodata_cn, tr_cn, _ = open_large_raster("F:/NP/CN/CN.tif")
+ds_bulk, nodata_bulk, tr_bulk, _ = open_large_raster("F:/NP/BulkDensity_Extra/Bulk_density.tif")
+ds_Nsoil, nodata_Nsoil, tr_Nsoil, _ = open_large_raster("F:/NP/N/N.tif")
+ds_Psoil, nodata_Psoil, tr_Psoil, _ = open_large_raster("F:/NP/P (1)/P.tif")
+
+# =================================================
+# INPUT COORDINATE
+# =================================================
+lat = float(input("Enter latitude: "))
+lon = float(input("Enter longitude: "))
+
+# Transform input to main CRS
+transformer_main = Transformer.from_crs("EPSG:4326", crs_main, always_xy=True)
+x, y = transformer_main.transform(lon, lat)
+
+# =================================================
+# WATER CHECK
+# =================================================
+row_w, col_w = xy_to_rowcol(tr_water, arr_water, x, y)
+
+if row_w is None:
+    print("Outside water mask extent.")
+    sys.exit()
+
+if arr_water[row_w, col_w] == nodata_water or arr_water[row_w, col_w] == 1:
+    print("Location is WATER.")
+    sys.exit()
+
+print("Location is LAND")
+
+# =================================================
+# 4326 EXTRACTION + KDTree fallback
+# =================================================
+used_nearest_4326 = False
+nx, ny = x, y
+
+def extract_small(arr, nodata, transform):
+    row, col = xy_to_rowcol(transform, arr, x, y)
+    val = arr[row, col] if row is not None else None
+
+    if val in (None, nodata):
+        v, (newx, newy) = nearest_valid_value(arr, nodata, transform, x, y)
+        return v, True, newx, newy
+
+    return val, False, x, y
+
+ph_value, u1, nx, ny = extract_small(arr_ph, nodata_ph, tr_ph)
+koppen_value, u2, _, _ = extract_small(arr_koppen, nodata_koppen, tr_koppen)
+kfactor_value, u3, _, _ = extract_small(arr_kfac, nodata_kfac, tr_kfac)
+
+used_nearest_4326 = u1 or u2 or u3
+
+# =================================================
+# 3035 EXTRACTION
+# =================================================
+transformer_3035 = Transformer.from_crs("EPSG:4326", crs_3035, always_xy=True)
+x_3035, y_3035 = transformer_3035.transform(lon, lat)
+
+slope_value, used_slope = get_value_large(ds_slope, tr_slope, nodata_slope, x_3035, y_3035)
+clay_value, used_clay = get_value_large(ds_clay, tr_clay, nodata_clay, x_3035, y_3035)
+cn_value, used_cn = get_value_large(ds_cn, tr_cn, nodata_cn, x_3035, y_3035)
+bulk_value, used_bulk = get_value_large(ds_bulk, tr_bulk, nodata_bulk, x_3035, y_3035)
+Nsoil_value, used_N = get_value_large(ds_Nsoil, tr_Nsoil, nodata_Nsoil, x_3035, y_3035)
+Psoil_value, used_P = get_value_large(ds_Psoil, tr_Psoil, nodata_Psoil, x_3035, y_3035)
+
+# =================================================
+# OUTPUT
+# =================================================
+print("\nFinal Result")
+print(f"pH: {ph_value}")
+print(f"Köppen: {koppen_value}")
+print(f"K-factor: {kfactor_value}")
+print(f"Slope: {slope_value}")
+print(f"Clay: {clay_value}")
+print(f"CN Ratio: {cn_value}")
+print(f"Bulk density: {bulk_value}")
+print(f"Soil Nitrogen (N): {Nsoil_value}")
+print(f"Soil Phosphorus (P): {Psoil_value}")
+
+print("\nPixel usage:")
+print("4326:", "Nearest" if used_nearest_4326 else "Exact")
+print("Slope:", "Nearest" if used_slope else "Exact")
+print("Clay:", "Nearest" if used_clay else "Exact")
+print("CN:", "Nearest" if used_cn else "Exact")
+print("Bulk:", "Nearest" if used_bulk else "Exact")
+print("N:", "Nearest" if used_N else "Exact")
+print("P:", "Nearest" if used_P else "Exact")
+
