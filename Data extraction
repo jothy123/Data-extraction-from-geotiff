@@ -94,20 +94,20 @@ def get_value_large(ds, transform, nodata, x, y):
 # =================================================
 # LOAD 4326 RASTERS
 # =================================================
-ds_ph, arr_ph, nodata_ph, tr_ph, crs_main = open_raster("F:/NP/pH_CaCl/4326.tif")
-ds_water, arr_water, nodata_water, tr_water, _ = open_raster("F:/NP/water_mask_whole_reprojected_EU.tif")
-ds_koppen, arr_koppen, nodata_koppen, tr_koppen, _ = open_raster("F:/NP/Prototype_input_original_image-20260107T225850Z-1-001/Prototype_input_original_image/Koppen_climate/koppen_geiger_0p00833333.tif")
-ds_kfac, arr_kfac, nodata_kfac, tr_kfac, _ = open_raster("F:/NP/Prototype_input_original_image-20260107T225850Z-1-001/Prototype_input_original_image/Erodibility_Kfactor/K-Factor.tif")
+ds_ph, arr_ph, nodata_ph, tr_ph, crs_main = open_raster("F:/NP/Geo tiff/4326/pH_CaCl_4326.tif")
+ds_water, arr_water, nodata_water, tr_water, _ = open_raster("F:/NP/Geo tiff/4326/water_mask_whole_reprojected_EU.tif")
+ds_koppen, arr_koppen, nodata_koppen, tr_koppen, _ = open_raster("F:/NP/Geo tiff/4326/koppen_geiger_0p00833333.tif")
+ds_kfac, arr_kfac, nodata_kfac, tr_kfac, _ = open_raster("F:/NP/Geo tiff/4326/K-Factor.tif")
 
 # =================================================
 # LOAD 3035 RASTERS
 # =================================================
-ds_slope, nodata_slope, tr_slope, crs_3035 = open_large_raster("F:/NP/Prototype_input_original_image-20260107T225850Z-1-001/Prototype_input_original_image/slope/eudem_slop_3035_europe.tif")
-ds_clay, nodata_clay, tr_clay, _ = open_large_raster("F:/NP/Clay_Extra/Clay.tif")
-ds_cn, nodata_cn, tr_cn, _ = open_large_raster("F:/NP/CN/CN.tif")
-ds_bulk, nodata_bulk, tr_bulk, _ = open_large_raster("F:/NP/BulkDensity_Extra/Bulk_density.tif")
-ds_Nsoil, nodata_Nsoil, tr_Nsoil, _ = open_large_raster("F:/NP/N/N.tif")
-ds_Psoil, nodata_Psoil, tr_Psoil, _ = open_large_raster("F:/NP/P (1)/P.tif")
+ds_slope, nodata_slope, tr_slope, crs_3035 = open_large_raster("F:/NP/Geo tiff/3035/eudem_slop_3035_europe.tif")
+ds_clay, nodata_clay, tr_clay, _ = open_large_raster("F:/NP/Geo tiff/3035/Clay.tif")
+ds_cn, nodata_cn, tr_cn, _ = open_large_raster("F:/NP/Geo tiff/3035/CN.tif")
+ds_bulk, nodata_bulk, tr_bulk, _ = open_large_raster("F:/NP/Geo tiff/3035/Bulk_density.tif")
+ds_Nsoil, nodata_Nsoil, tr_Nsoil, _ = open_large_raster("F:/NP/Geo tiff/3035/N.tif")
+ds_Psoil, nodata_Psoil, tr_Psoil, _ = open_large_raster("F:/NP/Geo tiff/3035/P.tif")
 
 # =================================================
 # INPUT COORDINATE
@@ -191,4 +191,5 @@ print("CN:", "Nearest" if used_cn else "Exact")
 print("Bulk:", "Nearest" if used_bulk else "Exact")
 print("N:", "Nearest" if used_N else "Exact")
 print("P:", "Nearest" if used_P else "Exact")
+
 
